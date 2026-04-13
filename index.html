@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendario de Reuniones</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0d0f14; --surface:#161b25; --surface2:#1e2535; --border:#2a3348;
+    --accent:#2563eb; --accent-light:#3b82f6; --accent-glow:rgba(37,99,235,.18);
+    --zoom:#2d8cff; --text:#e8ecf4; --text-muted:#7a8599; --text-dim:#4a556a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:32px 20px 60px}
+
+  .header{max-width:1100px;margin:0 auto 10px;display:flex;align-items:flex-end;gap:16px;border-bottom:1px solid var(--border);padding-bottom:20px}
+  .header-icon{width:44px;height:44px;background:var(--accent);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+  .header-text h1{font-family:'Syne',sans-serif;font-size:22px;letter-spacing:-.5px}
+  .header-text p{font-size:13px;color:var(--text-muted);margin-top:2px}
+
+  .nav{max-width:1100px;margin:0 auto 28px;display:flex;gap:8px;flex-wrap:wrap}
+  .nav button{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);font-family:'DM Sans',sans-serif;font-size:12px;padding:6px 16px;border-radius:20px;cursor:pointer;transition:.15s}
+  .nav button:hover,.nav button.active{background:var(--accent-glow);border-color:rgba(59,130,246,.4);color:var(--accent-light)}
+
+  .week-block{max-width:1100px;margin:0 auto 48px;display:none}
+  .week-block.visible{display:block}
+  .week-label{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+  .badge{font-family:'Syne',sans-serif;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent-light);background:var(--accent-glow);border:1px solid rgba(59,130,246,.25);padding:3px 10px;border-radius:20px}
+  .range{font-size:13px;color:var(--text-muted)}
+
+  .grid{display:grid;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--surface)}
+  .col-header{padding:12px 8px 10px;text-align:center;border-bottom:1px solid var(--border);background:var(--surface2)}
+  .col-header.time-col{border-right:1px solid var(--border)}
+  .col-header .day-name{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--text-muted);font-weight:500}
+  .col-header .day-num{font-family:'Syne',sans-serif;font-size:20px;color:var(--text);margin-top:2px;line-height:1}
+  .col-header.today .day-num,.col-header.today .day-name{color:var(--accent-light)}
+
+  .time-cell{height:52px;display:flex;align-items:flex-start;justify-content:flex-end;padding:6px 10px 0 0;font-size:11px;color:var(--text-dim);border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .time-cell:last-child{border-bottom:none}
+  .day-col{position:relative;border-right:1px solid var(--border)}
+  .day-col:last-child{border-right:none}
+  .hour-row{height:52px;border-bottom:1px solid var(--border)}
+  .hour-row:last-child{border-bottom:none}
+
+  .meeting{position:absolute;left:5px;right:5px;border-radius:8px;padding:8px 10px;background:linear-gradient(135deg,rgba(37,99,235,.28),rgba(37,99,235,.14));border:1px solid rgba(59,130,246,.4);cursor:pointer;transition:.18s;text-decoration:none;display:block;overflow:hidden;z-index:2}
+  .meeting:hover{background:linear-gradient(135deg,rgba(45,140,255,.42),rgba(37,99,235,.28));border-color:var(--zoom);transform:translateY(-1px);box-shadow:0 4px 20px rgba(45,140,255,.25)}
+  .meeting .m-title{font-size:11.5px;font-weight:600;color:#c7d9ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+  .meeting .m-time{font-size:10px;color:var(--text-muted);margin-top:2px}
+  .meeting .zoom-chip{display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-size:9.5px;color:var(--zoom);background:rgba(45,140,255,.12);border:1px solid rgba(45,140,255,.25);border-radius:4px;padding:1px 6px;font-weight:500}
+
+  .legend{max-width:1100px;margin:0 auto;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:8px}
+  .legend-dot{width:8px;height:8px;background:var(--zoom);border-radius:50%}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">📅</div>
+  <div class="header-text">
+    <h1>Calendario de Reuniones</h1>
+    <p>Haz clic en cada reunión para abrir el enlace de Zoom · Horario: 8:00 – 19:00</p>
+  </div>
+</div>
+
+<div class="nav" id="nav"></div>
+<div id="weeks-container"></div>
+
+<div class="legend"><span class="legend-dot"></span> Reunión con enlace de Zoom activo</div>
+
+<script>
+// ============================================================
+//  ✏️  EDITA AQUÍ CADA QUINCENA
+//  Cada objeto en SEMANAS es una semana del calendario.
+//  - label: nombre de la semana (ej. "Semana 1")
+//  - rango: texto descriptivo de fechas
+//  - dias: arreglo con los días que se muestran (nombre corto + número)
+//  - hoy: índice (0 = primer día) del día actual para resaltarlo, -1 si ninguno
+//  - reuniones: lista de reuniones de esa semana
+//      col   → índice del día (0 = primer día de 'dias')
+//      titulo → nombre de la reunión
+//      start  → hora de inicio (número, ej. 16)
+//      end    → hora de fin   (número, ej. 17)
+//      url    → enlace de Zoom
+// ============================================================
+const SEMANAS = [
+  {
+    label: "Semana 1",
+    rango: "23 – 28 de marzo de 2026",
+    dias: ["Lun 23","Mar 24","Mié 25","Jue 26","Vie 27","Sáb 28"],
+    hoy: 1,
+    reuniones: [
+      { col:1, titulo:"Reunión Ruta Tuxtla",          start:16, end:17, url:"https://us06web.zoom.us/j/85076379796?pwd=aMNTdTzA3pQL4ifi1lqNmTgoE4M3MN.1" },
+      { col:2, titulo:"Reunión suc. Villaflores",     start:16, end:17, url:"https://us06web.zoom.us/j/81767918045?pwd=CeVLZMDUcY2Y3bGE3VoXpxzbVbmlIr.1" },
+      { col:3, titulo:"Reunión suc. Matriz",          start:16, end:17, url:"https://us06web.zoom.us/j/83859524869?pwd=iphUmGLhsQA1JDYDnS720DvgwSG2fJ.1" },
+      { col:4, titulo:"Reunión suc. Mérida",          start:16, end:17, url:"https://us06web.zoom.us/j/85026071233?pwd=hGkfrQbf27P2Ht5fvsDMCc9xMTBYFZ.1" },
+      { col:5, titulo:"Reunión suc. Tuxtla",          start:10, end:11, url:"https://us06web.zoom.us/j/85425063598?pwd=1nmsvIdWaItwZec4pexY8dfxETW24H.1" },
+    ]
+  },
+  {
+    label: "Semana 2",
+    rango: "30 de marzo – 3 de abril de 2026",
+    dias: ["Lun 30","Mar 31","Mié 1","Jue 2","Vie 3"],
+    hoy: -1,
+    reuniones: [
+      { col:0, titulo:"Reunión suc. Triunfo",         start:16, end:17, url:"https://us06web.zoom.us/j/89337266098?pwd=iMonLtRAqud5gZvUpkD8wTPC6Cx6LD.1" },
+      { col:1, titulo:"Reunión suc. Tapachula",       start:16, end:17, url:"https://us06web.zoom.us/j/88004767843?pwd=7KnbrmesGQLpQHemTkL2bOff50Wlek.1" },
+    ]
+  },
+  {
+    label: "Semana 3",
+    rango: "6 – 10 de abril de 2026",
+    dias: ["Lun 6","Mar 7","Mié 8","Jue 9","Vie 10"],
+    hoy: -1,
+    reuniones: [
+      { col:0, titulo:"Reunión suc. Cintalapa",       start:16, end:17, url:"https://us06web.zoom.us/j/81934540978?pwd=UDruhNaBB1nwjafwc4ZOlTNwLEmhfq.1" },
+      { col:1, titulo:"Reunión Ruta Comitán",         start:16, end:17, url:"https://us06web.zoom.us/j/85201981507?pwd=UJcBj69QDPIPsoiEP27cx8oRsiqmWY.1" },
+      { col:2, titulo:"Reunión suc. Central Abastos", start:16, end:17, url:"https://us06web.zoom.us/j/87328267181?pwd=snalxa0yZFX1UJpTvymdzEAlaLQeJT.1" },
+      { col:3, titulo:"Reunión suc. Matriz",          start:16, end:17, url:"https://us06web.zoom.us/j/83859524869?pwd=iphUmGLhsQA1JDYDnS720DvgwSG2fJ.1" },
+      { col:4, titulo:"Reunión suc. Mérida",          start:16, end:17, url:"https://us06web.zoom.us/j/85026071233?pwd=hGkfrQbf27P2Ht5fvsDMCc9xMTBYFZ.1" },
+    ]
+  },
+  // ➕ Para agregar una semana nueva, copia el bloque de arriba y pégalo aquí
+];
+// ============================================================
+//  🔽  No es necesario editar nada debajo de esta línea
+// ============================================================
+
+const HOURS = [8,9,10,11,12,13,14,15,16,17,18];
+const SLOT_H = 52;
+
+function buildWeek(week, idx) {
+  const block = document.createElement('div');
+  block.className = 'week-block' + (idx === 0 ? ' visible' : '');
+  block.id = 'week-' + idx;
+
+  const numCols = week.dias.length;
+  const colTpl = `52px repeat(${numCols}, 1fr)`;
+
+  block.innerHTML = `
+    <div class="week-label">
+      <span class="badge">${week.label}</span>
+      <span class="range">${week.rango}</span>
+    </div>
+    <div class="grid" style="grid-template-columns:${colTpl}" id="grid-${idx}"></div>
+  `;
+  document.getElementById('weeks-container').appendChild(block);
+
+  const grid = document.getElementById('grid-' + idx);
+
+  // Headers
+  const timeTh = document.createElement('div');
+  timeTh.className = 'col-header time-col';
+  grid.appendChild(timeTh);
+
+  week.dias.forEach((d, i) => {
+    const [name, num] = d.split(' ');
+    const th = document.createElement('div');
+    th.className = 'col-header' + (i === week.hoy ? ' today' : '');
+    th.innerHTML = `<div class="day-name">${name}</div><div class="day-num">${num}</div>`;
+    grid.appendChild(th);
+  });
+
+  // Rows
+  HOURS.forEach((h, hi) => {
+    const tc = document.createElement('div');
+    tc.className = 'time-cell';
+    if (hi === HOURS.length - 1) tc.style.borderBottom = 'none';
+    tc.textContent = `${h}:00`;
+    grid.appendChild(tc);
+
+    week.dias.forEach((_, ci) => {
+      const cell = document.createElement('div');
+      cell.className = 'day-col';
+      cell.style.cssText = `height:${SLOT_H}px;border-bottom:${hi<HOURS.length-1?'1px solid var(--border)':'none'}`;
+
+      week.reuniones.forEach(m => {
+        if (m.col !== ci || m.start !== h) return;
+        const dur = m.end - m.start;
+        const card = document.createElement('a');
+        card.href = m.url;
+        card.target = '_blank';
+        card.rel = 'noopener';
+        card.className = 'meeting';
+        card.style.cssText = `top:4px;height:${dur*SLOT_H-8}px`;
+        card.innerHTML = `
+          <div class="m-title">${m.titulo}</div>
+          <div class="m-time">${m.start}:00 – ${m.end}:00</div>
+          <div class="zoom-chip">▶ Abrir Zoom</div>
+        `;
+        cell.appendChild(card);
+      });
+      grid.appendChild(cell);
+    });
+  });
+}
+
+function buildNav() {
+  const nav = document.getElementById('nav');
+  SEMANAS.forEach((w, i) => {
+    const btn = document.createElement('button');
+    btn.textContent = `${w.label} · ${w.rango}`;
+    btn.className = i === 0 ? 'active' : '';
+    btn.onclick = () => {
+      document.querySelectorAll('.week-block').forEach(b => b.classList.remove('visible'));
+      document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+      document.getElementById('week-' + i).classList.add('visible');
+      btn.classList.add('active');
+    };
+    nav.appendChild(btn);
+  });
+}
+
+SEMANAS.forEach((w, i) => buildWeek(w, i));
+buildNav();
+</script>
+</body>
+</html>
